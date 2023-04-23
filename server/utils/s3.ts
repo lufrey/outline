@@ -158,18 +158,8 @@ export const deleteFromS3 = (key: string) =>
     })
     .promise();
 
-export const getSignedUrl = async (key: string, expiresInMs = 60) => {
-  const isDocker = AWS_S3_UPLOAD_BUCKET_URL.match(/http:\/\/s3:/);
-  const params = {
-    Bucket: AWS_S3_UPLOAD_BUCKET_NAME,
-    Key: key,
-    Expires: expiresInMs,
-    ResponseContentDisposition: "attachment",
-  };
-
-  const url = isDocker
-    ? `${publicS3Endpoint()}/${key}`
-    : await s3.getSignedUrlPromise("getObject", params);
+export const getSignedUrl = async (key: string) => {
+  const url = `${publicS3Endpoint()}/${key}?response-content-disposition=inline`;
 
   if (AWS_S3_ACCELERATE_URL) {
     return url.replace(AWS_S3_UPLOAD_BUCKET_URL, AWS_S3_ACCELERATE_URL);

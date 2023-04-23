@@ -88,6 +88,7 @@ export default function init(app: Koa = new Koa()): Koa {
         defaultSrc,
         scriptSrc,
         styleSrc,
+        mediaSrc: ["*"],
         imgSrc: ["*", "data:", "blob:"],
         frameSrc: ["*", "data:"],
         connectSrc: ["*"], // Do not use connect-src: because self + websockets does not work in
