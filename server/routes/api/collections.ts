@@ -13,7 +13,7 @@ import { colorPalette } from "@shared/utils/collections";
 import collectionExporter from "@server/commands/collectionExporter";
 import teamUpdater from "@server/commands/teamUpdater";
 import { sequelize } from "@server/database/sequelize";
-import { AuthorizationError, ValidationError } from "@server/errors";
+import { ValidationError } from "@server/errors";
 import auth from "@server/middlewares/authentication";
 import { rateLimiter } from "@server/middlewares/rateLimiter";
 import { transaction } from "@server/middlewares/transaction";
@@ -145,6 +145,21 @@ router.post("collections.info", auth(), async (ctx: APIContext) => {
   ctx.body = {
     data: presentCollection(collection),
     policies: presentPolicies(user, [collection]),
+  };
+});
+
+router.post("collections.documents", auth(), async (ctx: APIContext) => {
+  const { id } = ctx.request.body;
+  assertPresent(id, "id is required");
+  const { user } = ctx.state.auth;
+  const collection = await Collection.scope({
+    method: ["withMembership", user.id],
+  }).findByPk(id);
+
+  authorize(user, "readDocument", collection);
+
+  ctx.body = {
+    data: collection.documentStructure || [],
   };
 });
 
@@ -391,10 +406,6 @@ router.post(
       lock: transaction.LOCK.UPDATE,
     });
 
-    if (userId === actor.id) {
-      throw AuthorizationError("You cannot add yourself to a collection");
-    }
-
     if (permission) {
       assertCollectionPermission(permission);
     }
@@ -565,7 +576,7 @@ router.post(
     const collection = await Collection.scope({
       method: ["withMembership", user.id],
     }).findByPk(id);
-    authorize(user, "read", collection);
+    authorize(user, "export", collection);
 
     const fileOperation = await sequelize.transaction(async (transaction) =>
       collectionExporter({
@@ -641,7 +652,7 @@ router.post("collections.update", auth(), async (ctx: APIContext) => {
   authorize(user, "update", collection);
 
   // we're making this collection have no default access, ensure that the
-  // current user has a read-write membership so that at least they can edit it
+  // current user has an admin membership so that at least they can manage it.
   if (
     permission !== CollectionPermission.ReadWrite &&
     collection.permission === CollectionPermission.ReadWrite
@@ -652,7 +663,7 @@ router.post("collections.update", auth(), async (ctx: APIContext) => {
         userId: user.id,
       },
       defaults: {
-        permission: CollectionPermission.ReadWrite,
+        permission: CollectionPermission.Admin,
         createdById: user.id,
       },
     });
@@ -750,12 +761,18 @@ router.post(
   auth(),
   pagination(),
   async (ctx: APIContext) => {
+    const { includeListOnly } = ctx.request.body;
     const { user } = ctx.state.auth;
     const collectionIds = await user.collectionIds();
-    const where: WhereOptions<Collection> = {
-      teamId: user.teamId,
-      id: collectionIds,
-    };
+    const where: WhereOptions<Collection> =
+      includeListOnly && user.isAdmin
+        ? {
+            teamId: user.teamId,
+          }
+        : {
+            teamId: user.teamId,
+            id: collectionIds,
+          };
     const collections = await Collection.scope({
       method: ["withMembership", user.id],
     }).findAll({
