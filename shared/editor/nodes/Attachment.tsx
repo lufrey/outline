@@ -124,10 +124,9 @@ export default class Attachment extends Node {
         )}
         {isPdf(title) && (
           <EmbedWrapper>
-            <object
-              data={node.attrs.href}
-              type="application/pdf"
-              aria-labelledby="PDF document"
+            <iframe
+              name="pdf"
+              src={node.attrs.href}
               width="100%"
               style={{ height: "50vh", display: "block" }}
             />
