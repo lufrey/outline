@@ -140,11 +140,15 @@ class DocumentScene extends React.Component<Props> {
     }
 
     const { view, parser } = editorRef;
-    view.dispatch(
-      view.state.tr
-        .setSelection(new AllSelection(view.state.doc))
-        .replaceSelectionWith(parser.parse(template.text))
-    );
+    const doc = parser.parse(template.text);
+
+    if (doc) {
+      view.dispatch(
+        view.state.tr
+          .setSelection(new AllSelection(view.state.doc))
+          .replaceSelectionWith(doc)
+      );
+    }
 
     this.isEditorDirty = true;
 
@@ -376,16 +380,8 @@ class DocumentScene extends React.Component<Props> {
   };
 
   render() {
-    const {
-      document,
-      revision,
-      readOnly,
-      abilities,
-      auth,
-      ui,
-      shareId,
-      t,
-    } = this.props;
+    const { document, revision, readOnly, abilities, auth, ui, shareId, t } =
+      this.props;
     const team = auth.team;
     const isShare = !!shareId;
     const embedsDisabled =
@@ -455,8 +451,8 @@ class DocumentScene extends React.Component<Props> {
             <Header
               document={document}
               documentHasHeadings={hasHeadings}
+              revision={revision}
               shareId={shareId}
-              isRevision={!!revision}
               isDraft={document.isDraft}
               isEditing={!readOnly && !team?.seamlessEditing}
               isSaving={this.isSaving}
