@@ -14,6 +14,12 @@ import {
   Node as ProsemirrorNode,
 } from "prosemirror-model";
 import { EditorState, Selection, Plugin, Transaction } from "prosemirror-state";
+import {
+  AddMarkStep,
+  RemoveMarkStep,
+  ReplaceAroundStep,
+  ReplaceStep,
+} from "prosemirror-transform";
 import { Decoration, EditorView, NodeViewConstructor } from "prosemirror-view";
 import * as React from "react";
 import styled, { css, DefaultTheme, ThemeProps } from "styled-components";
@@ -70,7 +76,9 @@ export type Props = {
   /** If the editor should not allow editing */
   readOnly?: boolean;
   /** If the editor should still allow editing checkboxes when it is readOnly */
-  readOnlyWriteCheckboxes?: boolean;
+  canUpdate?: boolean;
+  /** If the editor should still allow commenting when it is readOnly */
+  canComment?: boolean;
   /** A dictionary of translated strings used in the editor */
   dictionary: Dictionary;
   /** The reading direction of the text content, if known */
@@ -225,7 +233,7 @@ export class Editor extends React.PureComponent<
     window.addEventListener("theme-changed", this.dispatchThemeChanged);
 
     if (this.props.scrollTo) {
-      this.scrollToAnchor(this.props.scrollTo);
+      void this.scrollToAnchor(this.props.scrollTo);
     }
 
     this.calculateDir();
@@ -255,7 +263,7 @@ export class Editor extends React.PureComponent<
     }
 
     if (this.props.scrollTo && this.props.scrollTo !== prevProps.scrollTo) {
-      this.scrollToAnchor(this.props.scrollTo);
+      void this.scrollToAnchor(this.props.scrollTo);
     }
 
     // Focus at the end of the document if switching from readOnly and autoFocus
@@ -441,9 +449,17 @@ export class Editor extends React.PureComponent<
 
     const isEditingCheckbox = (tr: Transaction) =>
       tr.steps.some(
-        (step: any) =>
-          step.slice?.content?.firstChild?.type.name ===
-          this.schema.nodes.checkbox_item.name
+        (step) =>
+          (step instanceof ReplaceAroundStep || step instanceof ReplaceStep) &&
+          step.slice.content?.firstChild?.type.name ===
+            this.schema.nodes.checkbox_item.name
+      );
+
+    const isEditingComment = (tr: Transaction) =>
+      tr.steps.some(
+        (step) =>
+          (step instanceof AddMarkStep || step instanceof RemoveMarkStep) &&
+          step.mark.type.name === this.schema.marks.comment.name
       );
 
     const self = this; // eslint-disable-line
@@ -469,8 +485,8 @@ export class Editor extends React.PureComponent<
         if (
           transactions.some((tr) => tr.docChanged) &&
           (!self.props.readOnly ||
-            (self.props.readOnlyWriteCheckboxes &&
-              transactions.some(isEditingCheckbox)))
+            (self.props.canUpdate && transactions.some(isEditingCheckbox)) ||
+            (self.props.canComment && transactions.some(isEditingComment)))
         ) {
           self.handleChange();
         }
@@ -496,9 +512,13 @@ export class Editor extends React.PureComponent<
 
     try {
       this.mutationObserver?.disconnect();
-      this.mutationObserver = observe(hash, (element) => {
-        element.scrollIntoView({ behavior: "smooth" });
-      });
+      this.mutationObserver = observe(
+        hash,
+        (element) => {
+          element.scrollIntoView();
+        },
+        this.elementRef.current || undefined
+      );
     } catch (err) {
       // querySelector will throw an error if the hash begins with a number
       // or contains a period. This is protected against now by safeSlugify
@@ -723,15 +743,8 @@ export class Editor extends React.PureComponent<
   };
 
   public render() {
-    const {
-      dir,
-      readOnly,
-      readOnlyWriteCheckboxes,
-      grow,
-      style,
-      className,
-      onKeyDown,
-    } = this.props;
+    const { dir, readOnly, canUpdate, grow, style, className, onKeyDown } =
+      this.props;
     const { isRTL } = this.state;
 
     return (
@@ -751,11 +764,24 @@ export class Editor extends React.PureComponent<
               rtl={isRTL}
               grow={grow}
               readOnly={readOnly}
-              readOnlyWriteCheckboxes={readOnlyWriteCheckboxes}
+              readOnlyWriteCheckboxes={canUpdate}
               focusedCommentId={this.props.focusedCommentId}
               editorStyle={this.props.editorStyle}
               ref={this.elementRef}
             />
+            {this.view && (
+              <SelectionToolbar
+                rtl={isRTL}
+                readOnly={readOnly}
+                canComment={this.props.canComment}
+                isTemplate={this.props.template === true}
+                onOpen={this.handleOpenSelectionToolbar}
+                onClose={this.handleCloseSelectionToolbar}
+                onSearchLink={this.props.onSearchLink}
+                onClickLink={this.props.onClickLink}
+                onCreateLink={this.props.onCreateLink}
+              />
+            )}
             {!readOnly && this.view && (
               <>
                 {this.marks.link && (
@@ -799,15 +825,6 @@ export class Editor extends React.PureComponent<
                     }
                   />
                 )}
-                <SelectionToolbar
-                  rtl={isRTL}
-                  isTemplate={this.props.template === true}
-                  onOpen={this.handleOpenSelectionToolbar}
-                  onClose={this.handleCloseSelectionToolbar}
-                  onSearchLink={this.props.onSearchLink}
-                  onClickLink={this.props.onClickLink}
-                  onCreateLink={this.props.onCreateLink}
-                />
                 <BlockMenu
                   rtl={isRTL}
                   isActive={
@@ -866,7 +883,13 @@ const observe = (
       callback(match as HTMLElement);
     }
   });
-  observer.observe(targetNode, { childList: true, subtree: true });
+
+  if (targetNode.querySelector(selector)) {
+    callback(targetNode.querySelector(selector) as HTMLElement);
+  } else {
+    observer.observe(targetNode, { childList: true, subtree: true });
+  }
+
   return observer;
 };
 

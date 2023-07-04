@@ -397,10 +397,9 @@ export class Environment {
   );
 
   /**
-   * This is injected into the HTML page headers for Slack.
+   * This is used to verify webhook requests received from Slack.
    */
   @IsOptional()
-  @CannotUseWithout("SLACK_CLIENT_ID")
   public SLACK_VERIFICATION_TOKEN = this.toOptionalString(
     process.env.SLACK_VERIFICATION_TOKEN
   );
@@ -540,6 +539,16 @@ export class Environment {
   @CannotUseWithout("RATE_LIMITER_ENABLED")
   public RATE_LIMITER_REQUESTS =
     this.toOptionalNumber(process.env.RATE_LIMITER_REQUESTS) ?? 1000;
+
+  /**
+   * Set max allowed realtime connections before throttling. Defaults to 50
+   * requests/ip/duration window.
+   */
+  @IsOptional()
+  @IsNumber()
+  public RATE_LIMITER_COLLABORATION_REQUESTS =
+    this.toOptionalNumber(process.env.RATE_LIMITER_COLLABORATION_REQUESTS) ??
+    50;
 
   /**
    * Set fixed duration window(in secs) for default rate limiter, elapsing which
