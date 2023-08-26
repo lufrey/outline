@@ -1,6 +1,7 @@
 import path from "path";
 import emojiRegex from "emoji-regex";
-import { truncate } from "lodash";
+import escapeRegExp from "lodash/escapeRegExp";
+import truncate from "lodash/truncate";
 import mammoth from "mammoth";
 import quotedPrintable from "quoted-printable";
 import { Transaction } from "sequelize";
@@ -221,7 +222,10 @@ async function documentImporter({
       ip,
       transaction,
     });
-    text = text.replace(uri, attachment.redirectUrl);
+    text = text.replace(
+      new RegExp(escapeRegExp(uri), "g"),
+      attachment.redirectUrl
+    );
   }
 
   // It's better to truncate particularly long titles than fail the import
@@ -232,7 +236,7 @@ async function documentImporter({
 
   if (state.length > DocumentValidation.maxStateLength) {
     throw InvalidRequestError(
-      `The document is too large to import, please reduce the length and try again`
+      `The document "${title}" is too large to import, please reduce the length and try again`
     );
   }
 

@@ -4,7 +4,7 @@ import { NodeSpec, NodeType, Node as ProsemirrorNode } from "prosemirror-model";
 import { NodeSelection } from "prosemirror-state";
 import * as React from "react";
 import { Trans } from "react-i18next";
-import styled from "styled-components";
+import { Primitive } from "utility-types";
 import { bytesToHumanReadable } from "../../utils/files";
 import { sanitizeUrl } from "../../utils/urls";
 import toggleWrap from "../commands/toggleWrap";
@@ -116,7 +116,7 @@ export default class Attachment extends Node {
           onMouseDown={this.handleSelect(props)}
           context={
             node.attrs.href ? (
-              bytesToHumanReadable(node.attrs.size)
+              bytesToHumanReadable(node.attrs.size || "0")
             ) : (
               <>
                 <Trans>Uploading</Trans>…
@@ -149,7 +149,7 @@ export default class Attachment extends Node {
   };
 
   commands({ type }: { type: NodeType }) {
-    return (attrs: Record<string, any>) => toggleWrap(type, attrs);
+    return (attrs: Record<string, Primitive>) => toggleWrap(type, attrs);
   }
 
   toMarkdown(state: MarkdownSerializerState, node: ProsemirrorNode) {

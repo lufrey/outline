@@ -61,8 +61,11 @@ export const openDocument = createAction({
         // cache if the document is renamed
         id: path.url,
         name: path.title,
-        icon: () =>
-          stores.documents.get(path.id)?.isStarred ? <StarredIcon /> : null,
+        icon: function _Icon() {
+          return stores.documents.get(path.id)?.isStarred ? (
+            <StarredIcon />
+          ) : null;
+        },
         section: DocumentSection,
         perform: () => history.push(path.url),
       }));
@@ -159,7 +162,7 @@ export const publishDocument = createAction({
     }
 
     if (document?.collectionId) {
-      await document.save({
+      await document.save(undefined, {
         publish: true,
       });
       stores.toasts.showToast(t("Document published"), {
@@ -404,13 +407,19 @@ export const pinDocumentToCollection = createAction({
       return;
     }
 
-    const document = stores.documents.get(activeDocumentId);
-    await document?.pin(document.collectionId);
+    try {
+      const document = stores.documents.get(activeDocumentId);
+      await document?.pin(document.collectionId);
 
-    const collection = stores.collections.get(activeCollectionId);
+      const collection = stores.collections.get(activeCollectionId);
 
-    if (!collection || !location.pathname.startsWith(collection?.url)) {
-      stores.toasts.showToast(t("Pinned to collection"));
+      if (!collection || !location.pathname.startsWith(collection?.url)) {
+        stores.toasts.showToast(t("Pinned to collection"));
+      }
+    } catch (err) {
+      stores.toasts.showToast(err.message, {
+        type: "error",
+      });
     }
   },
 });
@@ -443,10 +452,16 @@ export const pinDocumentToHome = createAction({
     }
     const document = stores.documents.get(activeDocumentId);
 
-    await document?.pin();
+    try {
+      await document?.pin();
 
-    if (location.pathname !== homePath()) {
-      stores.toasts.showToast(t("Pinned to team home"));
+      if (location.pathname !== homePath()) {
+        stores.toasts.showToast(t("Pinned to team home"));
+      }
+    } catch (err) {
+      stores.toasts.showToast(err.message, {
+        type: "error",
+      });
     }
   },
 });
