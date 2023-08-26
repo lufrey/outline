@@ -28,6 +28,8 @@ const isProduction = env.ENVIRONMENT === "production";
 const defaultSrc = ["'self'"];
 const scriptSrc = [
   "'self'",
+  "'unsafe-inline'",
+  "'unsafe-eval'",
   "gist.github.com",
   "www.googletagmanager.com",
   "cdn.zapier.com",
@@ -111,6 +113,7 @@ export default function init(app: Koa = new Koa(), server?: Server) {
         styleSrc,
         mediaSrc: ["*"],
         imgSrc: ["*", "data:", "blob:"],
+        scriptSrc,
         frameSrc: ["*", "data:"],
         // Do not use connect-src: because self + websockets does not work in
         // Safari, ref: https://bugs.webkit.org/show_bug.cgi?id=201591

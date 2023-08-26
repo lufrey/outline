@@ -4,6 +4,7 @@ import { NodeSpec, NodeType, Node as ProsemirrorNode } from "prosemirror-model";
 import { NodeSelection } from "prosemirror-state";
 import * as React from "react";
 import { Trans } from "react-i18next";
+import styled from "styled-components";
 import { Primitive } from "utility-types";
 import { bytesToHumanReadable } from "../../utils/files";
 import { sanitizeUrl } from "../../utils/urls";

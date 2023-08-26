@@ -125,28 +125,8 @@ export default class S3Storage extends BaseStorage {
       .promise();
   }
 
-  public getSignedUrl = async (key: string, expiresIn = 60) => {
-    const isDocker = env.AWS_S3_UPLOAD_BUCKET_URL.match(/http:\/\/s3:/);
-    const params = {
-      Bucket: env.AWS_S3_UPLOAD_BUCKET_NAME,
-      Key: key,
-      Expires: expiresIn,
-      ResponseContentDisposition: "attachment",
-    };
-
-    const url = isDocker
-      ? `${this.getPublicEndpoint()}/${key}`
-      : await this.client.getSignedUrlPromise("getObject", params);
-
-    if (env.AWS_S3_ACCELERATE_URL) {
-      return url.replace(
-        env.AWS_S3_UPLOAD_BUCKET_URL,
-        env.AWS_S3_ACCELERATE_URL
-      );
-    }
-
-    return url;
-  };
+  public getSignedUrl = async (key: string) =>
+    `${this.getPublicEndpoint()}/${key}?response-content-disposition=inline`;
 
   public getFileStream(key: string) {
     invariant(
