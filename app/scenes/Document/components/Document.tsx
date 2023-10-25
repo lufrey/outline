@@ -11,6 +11,7 @@ import {
   withRouter,
   Redirect,
 } from "react-router";
+import { toast } from "sonner";
 import styled from "styled-components";
 import breakpoint from "styled-components-breakpoint";
 import { s } from "@shared/styles";
@@ -176,7 +177,7 @@ class DocumentScene extends React.Component<Props> {
   };
 
   onSynced = async () => {
-    const { toasts, history, location, t } = this.props;
+    const { history, location, t } = this.props;
     const restore = location.state?.restore;
     const revisionId = location.state?.revisionId;
     const editorRef = this.editor.current;
@@ -191,7 +192,7 @@ class DocumentScene extends React.Component<Props> {
 
     if (response) {
       await this.replaceDocument(response.data);
-      toasts.showToast(t("Document restored"));
+      toast.success(t("Document restored"));
       history.replace(this.props.document.url, history.location.state);
     }
   };
@@ -316,9 +317,7 @@ class DocumentScene extends React.Component<Props> {
         this.props.ui.setActiveDocument(savedDocument);
       }
     } catch (err) {
-      this.props.toasts.showToast(err.message, {
-        type: "error",
-      });
+      toast.error(err.message);
     } finally {
       this.isSaving = false;
       this.isPublishing = false;
@@ -354,7 +353,7 @@ class DocumentScene extends React.Component<Props> {
     this.isUploading = false;
   };
 
-  onChange = (getEditorText: () => string) => {
+  handleChange = (getEditorText: () => string) => {
     const { document } = this.props;
     this.getEditorText = getEditorText;
 
@@ -369,9 +368,15 @@ class DocumentScene extends React.Component<Props> {
     this.headings = headings;
   };
 
-  onChangeTitle = action((value: string) => {
+  handleChangeTitle = action((value: string) => {
     this.title = value;
     this.props.document.title = value;
+    this.updateIsDirty();
+    void this.autosave();
+  });
+
+  handleChangeEmoji = action((value: string) => {
+    this.props.document.emoji = value;
     this.updateIsDirty();
     void this.autosave();
   });
@@ -385,7 +390,7 @@ class DocumentScene extends React.Component<Props> {
   render() {
     const { document, revision, readOnly, abilities, auth, ui, shareId, t } =
       this.props;
-    const team = auth.team;
+    const { team, user } = auth;
     const isShare = !!shareId;
     const embedsDisabled =
       (team && team.documentEmbeds === false) || document.embedsDisabled;
@@ -457,7 +462,7 @@ class DocumentScene extends React.Component<Props> {
               revision={revision}
               shareId={shareId}
               isDraft={document.isDraft}
-              isEditing={!readOnly && !team?.seamlessEditing}
+              isEditing={!readOnly && !!user?.separateEditMode}
               isSaving={this.isSaving}
               isPublishing={this.isPublishing}
               publishingIsDisabled={
@@ -482,7 +487,6 @@ class DocumentScene extends React.Component<Props> {
                 <Flex auto={!readOnly} reverse>
                   {revision ? (
                     <RevisionViewer
-                      isDraft={document.isDraft}
                       document={document}
                       revision={revision}
                       id={revision.id}
@@ -506,8 +510,9 @@ class DocumentScene extends React.Component<Props> {
                         onFileUploadStop={this.onFileUploadStop}
                         onSearchLink={this.props.onSearchLink}
                         onCreateLink={this.props.onCreateLink}
-                        onChangeTitle={this.onChangeTitle}
-                        onChange={this.onChange}
+                        onChangeTitle={this.handleChangeTitle}
+                        onChangeEmoji={this.handleChangeEmoji}
+                        onChange={this.handleChange}
                         onHeadingsChange={this.onHeadingsChange}
                         onSave={this.onSave}
                         onPublish={this.onPublish}

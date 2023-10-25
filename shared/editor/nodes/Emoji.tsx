@@ -1,4 +1,3 @@
-import nameToEmoji from "gemoji/name-to-emoji.json";
 import Token from "markdown-it/lib/token";
 import {
   NodeSpec,
@@ -9,12 +8,13 @@ import {
 import { Command, TextSelection } from "prosemirror-state";
 import { Primitive } from "utility-types";
 import Suggestion from "../extensions/Suggestion";
+import { getEmojiFromName } from "../lib/emoji";
 import { MarkdownSerializerState } from "../lib/markdown/serializer";
 import { SuggestionsMenuType } from "../plugins/Suggestions";
 import emojiRule from "../rules/emoji";
 
 /**
- * Languages using the colon character with a space infront in standard
+ * Languages using the colon character with a space in front in standard
  * punctuation. In this case the trigger is only matched once there is additional
  * text after the colon.
  */
@@ -34,7 +34,7 @@ export default class Emoji extends Suggestion {
     return {
       type: SuggestionsMenuType.Emoji,
       openRegex: new RegExp(
-        `(?:^|\\s):([0-9a-zA-Z_+-]+)${languageIsUsingColon ? "+" : "?"}$`
+        `(?:^|\\s):([0-9a-zA-Z_+-]+)${languageIsUsingColon ? "" : "?"}$`
       ),
       closeRegex:
         /(?:^|\s):(([0-9a-zA-Z_+-]*\s+)|(\s+[0-9a-zA-Z_+-]+)|[^0-9a-zA-Z_+-]+)$/,
@@ -71,19 +71,19 @@ export default class Emoji extends Suggestion {
         },
       ],
       toDOM: (node) => {
-        if (nameToEmoji[node.attrs["data-name"]]) {
+        if (getEmojiFromName(node.attrs["data-name"])) {
           return [
             "strong",
             {
               class: `emoji ${node.attrs["data-name"]}`,
               "data-name": node.attrs["data-name"],
             },
-            nameToEmoji[node.attrs["data-name"]],
+            getEmojiFromName(node.attrs["data-name"]),
           ];
         }
         return ["strong", { class: "emoji" }, `:${node.attrs["data-name"]}:`];
       },
-      toPlainText: (node) => nameToEmoji[node.attrs["data-name"]],
+      toPlainText: (node) => getEmojiFromName(node.attrs["data-name"]),
     };
   }
 
