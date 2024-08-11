@@ -1,3 +1,4 @@
+import last from "lodash/last";
 import { observer } from "mobx-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -5,11 +6,25 @@ import { mergeRefs } from "react-merge-refs";
 import { useHistory, useRouteMatch } from "react-router-dom";
 import { richExtensions, withComments } from "@shared/editor/nodes";
 import { TeamPreference } from "@shared/types";
+import { colorPalette } from "@shared/utils/collections";
 import Comment from "~/models/Comment";
 import Document from "~/models/Document";
 import { RefHandle } from "~/components/ContentEditable";
+import { useDocumentContext } from "~/components/DocumentContext";
 import Editor, { Props as EditorProps } from "~/components/Editor";
 import Flex from "~/components/Flex";
+import BlockMenuExtension from "~/editor/extensions/BlockMenu";
+import ClipboardTextSerializer from "~/editor/extensions/ClipboardTextSerializer";
+import EmojiMenuExtension from "~/editor/extensions/EmojiMenu";
+import FindAndReplaceExtension from "~/editor/extensions/FindAndReplace";
+import HoverPreviewsExtension from "~/editor/extensions/HoverPreviews";
+import Keys from "~/editor/extensions/Keys";
+import MentionMenuExtension from "~/editor/extensions/MentionMenu";
+import PasteHandler from "~/editor/extensions/PasteHandler";
+import PreventTab from "~/editor/extensions/PreventTab";
+import SmartText from "~/editor/extensions/SmartText";
+import useCurrentTeam from "~/hooks/useCurrentTeam";
+import useCurrentUser from "~/hooks/useCurrentUser";
 import useFocusedComment from "~/hooks/useFocusedComment";
 import usePolicy from "~/hooks/usePolicy";
 import useStores from "~/hooks/useStores";
@@ -18,16 +33,28 @@ import {
   documentPath,
   matchDocumentHistory,
 } from "~/utils/routeHelpers";
-import { useDocumentContext } from "../../../components/DocumentContext";
 import MultiplayerEditor from "./AsyncMultiplayerEditor";
 import DocumentMeta from "./DocumentMeta";
 import DocumentTitle from "./DocumentTitle";
 
-const extensions = withComments(richExtensions);
+const extensions = [
+  ...withComments(richExtensions),
+  SmartText,
+  PasteHandler,
+  ClipboardTextSerializer,
+  BlockMenuExtension,
+  EmojiMenuExtension,
+  MentionMenuExtension,
+  FindAndReplaceExtension,
+  HoverPreviewsExtension,
+  // Order these default key handlers last
+  PreventTab,
+  Keys,
+];
 
-type Props = Omit<EditorProps, "extensions" | "editorStyle"> & {
+type Props = Omit<EditorProps, "editorStyle"> & {
   onChangeTitle: (title: string) => void;
-  onChangeEmoji: (emoji: string | null) => void;
+  onChangeIcon: (icon: string | null, color: string | null) => void;
   id: string;
   document: Document;
   isDraft: boolean;
@@ -49,13 +76,14 @@ function DocumentEditor(props: Props, ref: React.RefObject<any>) {
   const { t } = useTranslation();
   const match = useRouteMatch();
   const focusedComment = useFocusedComment();
-  const { ui, comments, auth } = useStores();
-  const { user, team } = auth;
+  const { ui, comments } = useStores();
+  const user = useCurrentUser({ rejectOnEmpty: false });
+  const team = useCurrentTeam({ rejectOnEmpty: false });
   const history = useHistory();
   const {
     document,
     onChangeTitle,
-    onChangeEmoji,
+    onChangeIcon,
     isDraft,
     shareId,
     readOnly,
@@ -63,8 +91,9 @@ function DocumentEditor(props: Props, ref: React.RefObject<any>) {
     multiplayer,
     ...rest
   } = props;
-  const can = usePolicy(document.id);
+  const can = usePolicy(document);
 
+  const iconColor = document.color ?? (last(colorPalette) as string);
   const childRef = React.useRef<HTMLDivElement>(null);
   const focusAtStart = React.useCallback(() => {
     if (ref.current) {
@@ -160,16 +189,16 @@ function DocumentEditor(props: Props, ref: React.RefObject<any>) {
             ? document.titleWithDefault
             : document.title
         }
-        emoji={document.emoji}
+        icon={document.icon}
+        color={iconColor}
         onChangeTitle={onChangeTitle}
-        onChangeEmoji={onChangeEmoji}
+        onChangeIcon={onChangeIcon}
         onGoToNextInput={handleGoToNextInput}
         onBlur={handleBlur}
         placeholder={t("Untitled")}
       />
       {!shareId && (
         <DocumentMeta
-          isDraft={isDraft}
           document={document}
           to={
             match.path === matchDocumentHistory

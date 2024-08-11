@@ -1,15 +1,9 @@
 import { Blob } from "buffer";
-import { mkdir, unlink } from "fs/promises";
+import { mkdir, unlink, rmdir } from "fs/promises";
 import path from "path";
 import { Readable } from "stream";
-import {
-  ReadStream,
-  close,
-  pathExists,
-  createReadStream,
-  createWriteStream,
-  open,
-} from "fs-extra";
+import { PresignedPost } from "@aws-sdk/s3-presigned-post";
+import fs from "fs-extra";
 import invariant from "invariant";
 import JWT from "jsonwebtoken";
 import safeResolvePath from "resolve-path";
@@ -24,16 +18,16 @@ export default class LocalStorage extends BaseStorage {
     acl: string,
     maxUploadSize: number,
     contentType = "image"
-  ) {
+  ): Promise<Partial<PresignedPost>> {
     return Promise.resolve({
       url: this.getUrlForKey(key),
       fields: {
         key,
         acl,
-        maxUploadSize,
+        maxUploadSize: String(maxUploadSize),
         contentType,
       },
-    } as any);
+    });
   }
 
   public getUploadUrl() {
@@ -48,13 +42,13 @@ export default class LocalStorage extends BaseStorage {
     body,
     key,
   }: {
-    body: string | ReadStream | Buffer | Uint8Array | Blob;
+    body: string | fs.ReadStream | Buffer | Uint8Array | Blob;
     contentLength?: number;
     contentType?: string;
     key: string;
     acl?: string;
   }) => {
-    const exists = await pathExists(this.getFilePath(key));
+    const exists = await fs.pathExists(this.getFilePath(key));
     if (exists) {
       throw ValidationError(`File already exists at ${key}`);
     }
@@ -64,7 +58,7 @@ export default class LocalStorage extends BaseStorage {
     });
 
     let src: NodeJS.ReadableStream;
-    if (body instanceof ReadStream) {
+    if (body instanceof fs.ReadStream) {
       src = body;
     } else if (body instanceof Blob) {
       src = Readable.from(Buffer.from(await body.arrayBuffer()));
@@ -75,10 +69,11 @@ export default class LocalStorage extends BaseStorage {
     const filePath = this.getFilePath(key);
 
     // Create the file on disk first
-    await open(filePath, "w").then(close);
+    await fs.createFile(filePath);
 
     return new Promise<string>((resolve, reject) => {
-      const dest = createWriteStream(filePath)
+      const dest = fs
+        .createWriteStream(filePath)
         .on("error", reject)
         .on("finish", () => resolve(this.getUrlForKey(key)));
 
@@ -97,6 +92,17 @@ export default class LocalStorage extends BaseStorage {
       await unlink(filePath);
     } catch (err) {
       Logger.warn(`Couldn't delete ${filePath}`, err);
+      return;
+    }
+
+    const directory = path.dirname(filePath);
+    try {
+      await rmdir(directory);
+    } catch (err) {
+      if (err.code === "ENOTEMPTY") {
+        return;
+      }
+      Logger.warn(`Couldn't delete directory ${directory}`, err);
     }
   }
 
@@ -117,8 +123,21 @@ export default class LocalStorage extends BaseStorage {
     return Promise.resolve(`${env.URL}/api/files.get?sig=${sig}`);
   };
 
-  public getFileStream(key: string) {
-    return createReadStream(this.getFilePath(key));
+  public async getFileHandle(key: string) {
+    return {
+      path: this.getFilePath(key),
+      cleanup: async () => {
+        // no-op, as we're reading the canonical file directly
+      },
+    };
+  }
+
+  public getFileStream(key: string, range?: { start: number; end: number }) {
+    return Promise.resolve(fs.createReadStream(this.getFilePath(key), range));
+  }
+
+  public stat(key: string) {
+    return fs.stat(this.getFilePath(key));
   }
 
   private getFilePath(key: string) {

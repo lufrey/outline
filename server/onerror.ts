@@ -20,8 +20,6 @@ import {
 } from "@server/errors";
 import { requestErrorHandler } from "@server/logging/sentry";
 
-const isDev = env.ENVIRONMENT === "development";
-const isProd = env.ENVIRONMENT === "production";
 let errorHtmlCache: Buffer | undefined;
 
 export default function onerror(app: Koa) {
@@ -75,6 +73,10 @@ export default function onerror(app: Koa) {
       requestErrorHandler(err, this);
 
       if (!(err instanceof InternalError)) {
+        if (env.ENVIRONMENT === "test") {
+          // eslint-disable-next-line no-console
+          console.error(err);
+        }
         err = InternalError();
       }
     }
@@ -103,8 +105,8 @@ export default function onerror(app: Koa) {
       this.body = JSON.stringify({
         ok: false,
         error: snakeCase(err.id),
-        status: err.status,
-        message: err.message || err.name,
+        status: Number(err.status),
+        message: String(err.message || err.name),
         data: err.errorData ?? undefined,
       });
     }
@@ -159,11 +161,11 @@ function wrapInNativeError(err: any): Error {
 }
 
 function readErrorFile(): Buffer {
-  if (isDev) {
+  if (env.isDevelopment) {
     return fs.readFileSync(path.join(__dirname, "error.dev.html"));
   }
 
-  if (isProd) {
+  if (env.isProduction) {
     return (
       errorHtmlCache ??
       (errorHtmlCache = fs.readFileSync(

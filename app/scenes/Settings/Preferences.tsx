@@ -5,6 +5,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { languageOptions } from "@shared/i18n";
 import { TeamPreference, UserPreference } from "@shared/types";
+import { Theme } from "~/stores/UiStore";
 import Button from "~/components/Button";
 import Heading from "~/components/Heading";
 import InputSelect from "~/components/InputSelect";
@@ -19,39 +20,37 @@ import SettingRow from "./components/SettingRow";
 
 function Preferences() {
   const { t } = useTranslation();
-  const { dialogs, auth } = useStores();
+  const { ui, dialogs } = useStores();
   const user = useCurrentUser();
   const team = useCurrentTeam();
 
   const handlePreferenceChange =
     (inverted = false) =>
     async (ev: React.ChangeEvent<HTMLInputElement>) => {
-      const preferences = {
-        ...user.preferences,
-        [ev.target.name]: inverted ? !ev.target.checked : ev.target.checked,
-      };
-
-      await auth.updateUser({ preferences });
+      user.setPreference(
+        ev.target.name as UserPreference,
+        inverted ? !ev.target.checked : ev.target.checked
+      );
+      await user.save();
       toast.success(t("Preferences saved"));
     };
 
   const handleLanguageChange = async (language: string) => {
-    await auth.updateUser({ language });
+    await user.save({ language });
     toast.success(t("Preferences saved"));
   };
 
   const showDeleteAccount = () => {
     dialogs.openModal({
       title: t("Delete account"),
-      content: <UserDelete />,
-      isCentered: true,
+      content: <UserDelete onSubmit={dialogs.closeAllModals} />,
     });
   };
 
   return (
     <Scene title={t("Preferences")} icon={<SettingsIcon />}>
       <Heading>{t("Preferences")}</Heading>
-      <Text type="secondary">
+      <Text as="p" type="secondary">
         <Trans>Manage settings that affect your personal experience.</Trans>
       </Text>
 
@@ -82,6 +81,25 @@ function Preferences() {
           value={user.language}
           onChange={handleLanguageChange}
           ariaLabel={t("Language")}
+        />
+      </SettingRow>
+      <SettingRow
+        name="theme"
+        label={t("Appearance")}
+        description={t("Choose your preferred interface color scheme.")}
+      >
+        <InputSelect
+          ariaLabel={t("Appearance")}
+          options={[
+            { label: t("Light"), value: Theme.Light },
+            { label: t("Dark"), value: Theme.Dark },
+            { label: t("System"), value: Theme.System },
+          ]}
+          value={ui.resolvedTheme}
+          onChange={(theme) => {
+            ui.setTheme(theme as Theme);
+            toast.success(t("Preferences saved"));
+          }}
         />
       </SettingRow>
       <SettingRow

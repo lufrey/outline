@@ -1,16 +1,17 @@
 import Router from "koa-router";
-import { Op } from "sequelize";
+import { Op, WhereOptions } from "sequelize";
 import { MAX_AVATAR_DISPLAY } from "@shared/constants";
 import auth from "@server/middlewares/authentication";
 import { rateLimiter } from "@server/middlewares/rateLimiter";
+import { transaction } from "@server/middlewares/transaction";
 import validate from "@server/middlewares/validate";
 import { User, Event, Group, GroupUser } from "@server/models";
 import { authorize } from "@server/policies";
 import {
   presentGroup,
+  presentGroupUser,
   presentPolicies,
   presentUser,
-  presentGroupMembership,
 } from "@server/presenters";
 import { APIContext } from "@server/types";
 import { RateLimiterStrategy } from "@server/utils/RateLimiter";
@@ -25,13 +26,32 @@ router.post(
   pagination(),
   validate(T.GroupsListSchema),
   async (ctx: APIContext<T.GroupsListReq>) => {
-    const { direction, sort, userId } = ctx.input.body;
+    const { sort, direction, query, userId, name } = ctx.input.body;
     const { user } = ctx.state.auth;
+    authorize(user, "listGroups", user.team);
+
+    let where: WhereOptions<Group> = {
+      teamId: user.teamId,
+    };
+
+    if (name) {
+      where = {
+        ...where,
+        name: {
+          [Op.eq]: name,
+        },
+      };
+    } else if (query) {
+      where = {
+        ...where,
+        name: {
+          [Op.iLike]: `%${query}%`,
+        },
+      };
+    }
 
     const groups = await Group.filterByMember(userId).findAll({
-      where: {
-        teamId: user.teamId,
-      },
+      where,
       order: [[sort, direction]],
       offset: ctx.state.pagination.offset,
       limit: ctx.state.pagination.limit,
@@ -42,14 +62,14 @@ router.post(
       data: {
         groups: groups.map(presentGroup),
         groupMemberships: groups
-          .map((g) =>
-            g.groupMemberships
-              .filter((membership) => !!membership.user)
+          .map((group) =>
+            group.groupUsers
+              .filter((groupUser) => !!groupUser.user)
               .slice(0, MAX_AVATAR_DISPLAY)
           )
           .flat()
-          .map((membership) =>
-            presentGroupMembership(membership, { includeUser: true })
+          .map((groupUser) =>
+            presentGroupUser(groupUser, { includeUser: true })
           ),
       },
       policies: presentPolicies(user, groups),
@@ -80,29 +100,38 @@ router.post(
   rateLimiter(RateLimiterStrategy.TenPerHour),
   auth(),
   validate(T.GroupsCreateSchema),
+  transaction(),
   async (ctx: APIContext<T.GroupsCreateReq>) => {
     const { name } = ctx.input.body;
     const { user } = ctx.state.auth;
+    const { transaction } = ctx.state;
     authorize(user, "createGroup", user.team);
-    const g = await Group.create({
-      name,
-      teamId: user.teamId,
-      createdById: user.id,
-    });
+    const g = await Group.create(
+      {
+        name,
+        teamId: user.teamId,
+        createdById: user.id,
+      },
+      { transaction }
+    );
 
     // reload to get default scope
-    const group = await Group.findByPk(g.id, { rejectOnEmpty: true });
-
-    await Event.create({
-      name: "groups.create",
-      actorId: user.id,
-      teamId: user.teamId,
-      modelId: group.id,
-      data: {
-        name: group.name,
-      },
-      ip: ctx.request.ip,
+    const group = await Group.findByPk(g.id, {
+      transaction,
+      rejectOnEmpty: true,
     });
+
+    await Event.createFromContext(
+      ctx,
+      {
+        name: "groups.create",
+        modelId: group.id,
+        data: {
+          name: group.name,
+        },
+      },
+      { transaction }
+    );
 
     ctx.body = {
       data: presentGroup(group),
@@ -115,27 +144,30 @@ router.post(
   "groups.update",
   auth(),
   validate(T.GroupsUpdateSchema),
+  transaction(),
   async (ctx: APIContext<T.GroupsUpdateReq>) => {
     const { id, name } = ctx.input.body;
     const { user } = ctx.state.auth;
+    const { transaction } = ctx.state;
 
-    const group = await Group.findByPk(id);
+    const group = await Group.findByPk(id, { transaction });
     authorize(user, "update", group);
 
     group.name = name;
 
     if (group.changed()) {
-      await group.save();
-      await Event.create({
-        name: "groups.update",
-        teamId: user.teamId,
-        actorId: user.id,
-        modelId: group.id,
-        data: {
-          name,
+      await group.save({ transaction });
+      await Event.createFromContext(
+        ctx,
+        {
+          name: "groups.update",
+          modelId: group.id,
+          data: {
+            name,
+          },
         },
-        ip: ctx.request.ip,
-      });
+        { transaction }
+      );
     }
 
     ctx.body = {
@@ -149,24 +181,27 @@ router.post(
   "groups.delete",
   auth(),
   validate(T.GroupsDeleteSchema),
+  transaction(),
   async (ctx: APIContext<T.GroupsDeleteReq>) => {
     const { id } = ctx.input.body;
     const { user } = ctx.state.auth;
+    const { transaction } = ctx.state;
 
-    const group = await Group.findByPk(id);
+    const group = await Group.findByPk(id, { transaction });
     authorize(user, "delete", group);
 
-    await group.destroy();
-    await Event.create({
-      name: "groups.delete",
-      actorId: user.id,
-      modelId: group.id,
-      teamId: group.teamId,
-      data: {
-        name: group.name,
+    await group.destroy({ transaction });
+    await Event.createFromContext(
+      ctx,
+      {
+        name: "groups.delete",
+        modelId: group.id,
+        data: {
+          name: group.name,
+        },
       },
-      ip: ctx.request.ip,
-    });
+      { transaction }
+    );
 
     ctx.body = {
       success: true,
@@ -195,7 +230,7 @@ router.post(
       };
     }
 
-    const memberships = await GroupUser.findAll({
+    const groupUsers = await GroupUser.findAll({
       where: {
         groupId: id,
       },
@@ -215,10 +250,10 @@ router.post(
     ctx.body = {
       pagination: ctx.state.pagination,
       data: {
-        groupMemberships: memberships.map((membership) =>
-          presentGroupMembership(membership, { includeUser: true })
+        groupMemberships: groupUsers.map((groupUser) =>
+          presentGroupUser(groupUser, { includeUser: true })
         ),
-        users: memberships.map((membership) => presentUser(membership.user)),
+        users: groupUsers.map((groupUser) => presentUser(groupUser.user)),
       },
     };
   }
@@ -228,60 +263,64 @@ router.post(
   "groups.add_user",
   auth(),
   validate(T.GroupsAddUserSchema),
+  transaction(),
   async (ctx: APIContext<T.GroupsAddUserReq>) => {
     const { id, userId } = ctx.input.body;
     const actor = ctx.state.auth.user;
+    const { transaction } = ctx.state;
 
-    const user = await User.findByPk(userId);
+    const user = await User.findByPk(userId, { transaction });
     authorize(actor, "read", user);
 
-    let group = await Group.findByPk(id);
+    let group = await Group.findByPk(id, { transaction });
     authorize(actor, "update", group);
 
-    let membership = await GroupUser.findOne({
+    let groupUser = await GroupUser.findOne({
       where: {
         groupId: id,
         userId,
       },
+      transaction,
     });
 
-    if (!membership) {
+    if (!groupUser) {
       await group.$add("user", user, {
         through: {
           createdById: actor.id,
         },
+        transaction,
       });
       // reload to get default scope
-      membership = await GroupUser.findOne({
+      groupUser = await GroupUser.findOne({
         where: {
           groupId: id,
           userId,
         },
         rejectOnEmpty: true,
+        transaction,
       });
 
       // reload to get default scope
-      group = await Group.findByPk(id, { rejectOnEmpty: true });
+      group = await Group.findByPk(id, { transaction, rejectOnEmpty: true });
 
-      await Event.create({
-        name: "groups.add_user",
-        userId,
-        teamId: user.teamId,
-        modelId: group.id,
-        actorId: actor.id,
-        data: {
-          name: user.name,
+      await Event.createFromContext(
+        ctx,
+        {
+          name: "groups.add_user",
+          userId,
+          modelId: group.id,
+          data: {
+            name: user.name,
+          },
         },
-        ip: ctx.request.ip,
-      });
+        { transaction }
+      );
     }
 
     ctx.body = {
       data: {
         users: [presentUser(user)],
-        groupMemberships: [
-          presentGroupMembership(membership, { includeUser: true }),
-        ],
+        groupMemberships: [presentGroupUser(groupUser, { includeUser: true })],
         groups: [presentGroup(group)],
       },
     };
@@ -292,31 +331,34 @@ router.post(
   "groups.remove_user",
   auth(),
   validate(T.GroupsRemoveUserSchema),
+  transaction(),
   async (ctx: APIContext<T.GroupsRemoveUserReq>) => {
     const { id, userId } = ctx.input.body;
     const actor = ctx.state.auth.user;
+    const { transaction } = ctx.state;
 
-    let group = await Group.findByPk(id);
+    let group = await Group.findByPk(id, { transaction });
     authorize(actor, "update", group);
 
-    const user = await User.findByPk(userId);
+    const user = await User.findByPk(userId, { transaction });
     authorize(actor, "read", user);
 
-    await group.$remove("user", user);
-    await Event.create({
-      name: "groups.remove_user",
-      userId,
-      modelId: group.id,
-      teamId: user.teamId,
-      actorId: actor.id,
-      data: {
-        name: user.name,
+    await group.$remove("user", user, { transaction });
+    await Event.createFromContext(
+      ctx,
+      {
+        name: "groups.remove_user",
+        userId,
+        modelId: group.id,
+        data: {
+          name: user.name,
+        },
       },
-      ip: ctx.request.ip,
-    });
+      { transaction }
+    );
 
     // reload to get default scope
-    group = await Group.findByPk(id, { rejectOnEmpty: true });
+    group = await Group.findByPk(id, { transaction, rejectOnEmpty: true });
 
     ctx.body = {
       data: {

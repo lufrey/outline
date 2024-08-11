@@ -1,4 +1,9 @@
-import { Op, SaveOptions } from "sequelize";
+import {
+  InferAttributes,
+  InferCreationAttributes,
+  Op,
+  SaveOptions,
+} from "sequelize";
 import {
   DataType,
   BelongsTo,
@@ -9,11 +14,13 @@ import {
   IsNumeric,
   Length as SimpleLength,
 } from "sequelize-typescript";
+import type { ProsemirrorData } from "@shared/types";
 import { DocumentValidation } from "@shared/validations";
 import Document from "./Document";
 import User from "./User";
 import IdModel from "./base/IdModel";
 import Fix from "./decorators/Fix";
+import IsHexColor from "./validators/IsHexColor";
 import Length from "./validators/Length";
 
 @DefaultScope(() => ({
@@ -27,10 +34,13 @@ import Length from "./validators/Length";
 }))
 @Table({ tableName: "revisions", modelName: "revision" })
 @Fix
-class Revision extends IdModel {
+class Revision extends IdModel<
+  InferAttributes<Revision>,
+  Partial<InferCreationAttributes<Revision>>
+> {
   @IsNumeric
   @Column(DataType.SMALLINT)
-  version: number;
+  version?: number | null;
 
   @SimpleLength({
     max: 255,
@@ -46,15 +56,33 @@ class Revision extends IdModel {
   @Column
   title: string;
 
+  /**
+   * The content of the revision as Markdown.
+   *
+   * @deprecated Use `content` instead, or `DocumentHelper.toMarkdown` if exporting lossy markdown.
+   * This column will be removed in a future migration.
+   */
   @Column(DataType.TEXT)
   text: string;
 
+  /**
+   * The content of the revision as JSON.
+   */
+  @Column(DataType.JSONB)
+  content: ProsemirrorData;
+
+  /** An icon to use as the document icon. */
   @Length({
-    max: 1,
-    msg: `Emoji must be a single character`,
+    max: 50,
+    msg: `icon must be 50 characters or less`,
   })
   @Column
-  emoji: string | null;
+  icon: string | null;
+
+  /** The color of the icon. */
+  @IsHexColor
+  @Column
+  color: string | null;
 
   // associations
 
@@ -99,7 +127,9 @@ class Revision extends IdModel {
     return this.build({
       title: document.title,
       text: document.text,
-      emoji: document.emoji,
+      icon: document.icon,
+      color: document.color,
+      content: document.content,
       userId: document.lastModifiedById,
       editorVersion: document.editorVersion,
       version: document.version,
@@ -119,7 +149,7 @@ class Revision extends IdModel {
    */
   static createFromDocument(
     document: Document,
-    options?: SaveOptions<Revision>
+    options?: SaveOptions<InferAttributes<Revision>>
   ) {
     const revision = this.buildFromDocument(document);
     return revision.save(options);
@@ -127,7 +157,12 @@ class Revision extends IdModel {
 
   // instance methods
 
-  previous(): Promise<Revision | null> {
+  /**
+   * Find the revision for the document before this one.
+   *
+   * @returns A Promise that resolves to a Revision, or null if this is the first revision.
+   */
+  before(): Promise<Revision | null> {
     return (this.constructor as typeof Revision).findOne({
       where: {
         documentId: this.documentId,

@@ -6,6 +6,7 @@ import styled from "styled-components";
 import type { NavigationNode } from "@shared/types";
 import Document from "~/models/Document";
 import Breadcrumb from "~/components/Breadcrumb";
+import Icon from "~/components/Icon";
 import CollectionIcon from "~/components/Icons/CollectionIcon";
 import useStores from "~/hooks/useStores";
 import { MenuInternalLink } from "~/types";
@@ -15,7 +16,6 @@ import {
   settingsPath,
   trashPath,
 } from "~/utils/routeHelpers";
-import EmojiIcon from "./Icons/EmojiIcon";
 
 type Props = {
   children?: React.ReactNode;
@@ -68,6 +68,10 @@ const DocumentBreadcrumb: React.FC<Props> = ({
     ? collections.get(document.collectionId)
     : undefined;
 
+  React.useEffect(() => {
+    void document.loadRelations();
+  }, [document]);
+
   let collectionNode: MenuInternalLink | undefined;
 
   if (collection) {
@@ -75,22 +79,18 @@ const DocumentBreadcrumb: React.FC<Props> = ({
       type: "route",
       title: collection.name,
       icon: <CollectionIcon collection={collection} expanded />,
-      to: collectionPath(collection.url),
+      to: collectionPath(collection.path),
     };
-  } else if (document.collectionId && !collection) {
+  } else if (document.isCollectionDeleted) {
     collectionNode = {
       type: "route",
       title: t("Deleted Collection"),
       icon: undefined,
-      to: collectionPath("deleted-collection"),
+      to: "",
     };
   }
 
-  const path = React.useMemo(
-    () => collection?.pathToDocument(document.id).slice(0, -1) || [],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [collection, document, document.collectionId, document.parentDocumentId]
-  );
+  const path = document.pathTo;
 
   const items = React.useMemo(() => {
     const output = [];
@@ -103,12 +103,12 @@ const DocumentBreadcrumb: React.FC<Props> = ({
       output.push(collectionNode);
     }
 
-    path.forEach((node: NavigationNode) => {
+    path.slice(0, -1).forEach((node: NavigationNode) => {
       output.push({
         type: "route",
-        title: node.emoji ? (
+        title: node.icon ? (
           <>
-            <EmojiIcon emoji={node.emoji} /> {node.title}
+            <StyledIcon value={node.icon} color={node.color} /> {node.title}
           </>
         ) : (
           node.title
@@ -127,7 +127,7 @@ const DocumentBreadcrumb: React.FC<Props> = ({
     return (
       <>
         {collection?.name}
-        {path.map((node: NavigationNode) => (
+        {path.slice(0, -1).map((node: NavigationNode) => (
           <React.Fragment key={node.id}>
             <SmallSlash />
             {node.title}
@@ -143,6 +143,10 @@ const DocumentBreadcrumb: React.FC<Props> = ({
     </Breadcrumb>
   );
 };
+
+const StyledIcon = styled(Icon)`
+  margin-right: 2px;
+`;
 
 const SmallSlash = styled(GoToIcon)`
   width: 12px;

@@ -11,10 +11,10 @@ import useMobile from "~/hooks/useMobile";
 import useStores from "~/hooks/useStores";
 import { sidebarAppearDuration } from "~/styles/animations";
 
-type Props = React.HTMLAttributes<HTMLDivElement> & {
+interface Props extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
   border?: boolean;
-};
+}
 
 function Right({ children, border, className }: Props) {
   const theme = useTheme();
@@ -50,7 +50,8 @@ function Right({ children, border, className }: Props) {
     }
   }, []);
 
-  const handleMouseDown = React.useCallback(() => {
+  const handleMouseDown = React.useCallback((event) => {
+    event.preventDefault();
     setResizing(true);
   }, []);
 
@@ -67,18 +68,16 @@ function Right({ children, border, className }: Props) {
   }, [isResizing, handleDrag, handleStopDrag]);
 
   const style = React.useMemo(
-    () =>
-      isMobile
-        ? { width: "80%" }
-        : {
-            width: `${ui.sidebarRightWidth}px`,
-          },
-    [isMobile, ui.sidebarRightWidth]
+    () => ({
+      width: `${ui.sidebarRightWidth}px`,
+    }),
+    [ui.sidebarRightWidth]
   );
 
   const animationProps = {
     initial: {
       width: 0,
+      opacity: 0.9,
     },
     animate: {
       transition: isResizing
@@ -89,9 +88,11 @@ function Right({ children, border, className }: Props) {
             duration: sidebarAppearDuration / 1000,
           },
       width: ui.sidebarRightWidth,
+      opacity: 1,
     },
     exit: {
       width: 0,
+      opacity: 0,
     },
   };
 
@@ -115,6 +116,7 @@ const Position = styled(Flex)`
   position: fixed;
   top: 0;
   bottom: 0;
+  max-width: 80%;
 `;
 
 const Sidebar = styled(m.div)<{
@@ -134,7 +136,7 @@ const Sidebar = styled(m.div)<{
     top: 0;
     right: 0;
     bottom: 0;
-    z-index: ${depths.sidebar};
+    z-index: ${depths.mobileSidebar};
   `}
 
   ${breakpoint("tablet")`

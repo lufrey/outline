@@ -6,9 +6,9 @@ import { useHistory } from "react-router-dom";
 import { toast } from "sonner";
 import { IndexeddbPersistence } from "y-indexeddb";
 import * as Y from "yjs";
-import MultiplayerExtension from "@shared/editor/extensions/Multiplayer";
 import { supportsPassiveListener } from "@shared/utils/browser";
 import Editor, { Props as EditorProps } from "~/components/Editor";
+import MultiplayerExtension from "~/editor/extensions/Multiplayer";
 import env from "~/env";
 import useCurrentUser from "~/hooks/useCurrentUser";
 import useIdle from "~/hooks/useIdle";
@@ -93,7 +93,7 @@ function MultiplayerEditor({ onSynced, ...props }: Props, ref: any) {
     );
 
     provider.on("authenticationFailed", () => {
-      void auth.fetch().catch(() => {
+      void auth.fetchAuth().catch(() => {
         history.replace(homePath());
       });
     });

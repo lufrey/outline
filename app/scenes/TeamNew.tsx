@@ -46,8 +46,8 @@ function TeamNew({ user }: Props) {
       <form onSubmit={handleSubmit}>
         <Notice>
           <Trans>
-            Please note that workspaces are completely separate. They can have a
-            different domain, settings, users, and billing.
+            Please note that workspaces are completely separated. They can have
+            a different domain, settings, users, and billing.
           </Trans>
         </Notice>
 
@@ -65,9 +65,9 @@ function TeamNew({ user }: Props) {
           />
         </Flex>
 
-        <Text type="secondary">
+        <Text as="p" type="secondary">
           <Trans
-            defaults="Your are creating a new workspace using your current account — <em>{{email}}</em>"
+            defaults="You are creating a new workspace using your current account — <em>{{email}}</em>"
             values={{
               email: user.email,
             }}

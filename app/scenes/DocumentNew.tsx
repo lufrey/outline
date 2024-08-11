@@ -4,6 +4,8 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useHistory, useLocation, useRouteMatch } from "react-router-dom";
 import { toast } from "sonner";
+import { UserPreference } from "@shared/types";
+import { ProsemirrorHelper } from "@shared/utils/ProsemirrorHelper";
 import CenteredContent from "~/components/CenteredContent";
 import Flex from "~/components/Flex";
 import PlaceholderDocument from "~/components/PlaceholderDocument";
@@ -39,15 +41,21 @@ function DocumentNew({ template }: Props) {
         if (id) {
           collection = await collections.fetch(id);
         }
-        const document = await documents.create({
-          collectionId: collection?.id,
-          parentDocumentId,
-          fullWidth: parentDocument?.fullWidth,
-          templateId: query.get("templateId") ?? undefined,
-          template,
-          title: "",
-          text: "",
-        });
+        const document = await documents.create(
+          {
+            collectionId: collection?.id,
+            parentDocumentId,
+            fullWidth:
+              parentDocument?.fullWidth ||
+              user.getPreference(UserPreference.FullWidthDocuments),
+            templateId: query.get("templateId") ?? undefined,
+            template,
+            title: "",
+            data: ProsemirrorHelper.getEmptyDocument(),
+          },
+          { publish: collection?.id || parentDocumentId ? true : undefined }
+        );
+
         history.replace(
           template || !user.separateEditMode
             ? documentPath(document)

@@ -38,6 +38,8 @@ export type Placement =
 
 type Props = MenuStateReturn & {
   "aria-label"?: string;
+  /** Reference to the rendered menu div element */
+  menuRef?: React.RefObject<HTMLDivElement>;
   /** The parent menu state if this is a submenu. */
   parentMenuState?: Omit<MenuStateReturn, "items">;
   /** Called when the context menu is opened. */
@@ -52,6 +54,7 @@ type Props = MenuStateReturn & {
 };
 
 const ContextMenu: React.FC<Props> = ({
+  menuRef,
   children,
   onOpen,
   onClose,
@@ -105,7 +108,12 @@ const ContextMenu: React.FC<Props> = ({
   // trigger and the bottom of the window
   return (
     <>
-      <Menu hideOnClickOutside={!isMobile} preventBodyScroll={false} {...rest}>
+      <Menu
+        ref={menuRef}
+        hideOnClickOutside={!isMobile}
+        preventBodyScroll={false}
+        {...rest}
+      >
         {(props) => (
           <InnerContextMenu
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -215,6 +223,12 @@ export const Position = styled.div`
   position: absolute;
   z-index: ${depths.menu};
 
+  &.focus-visible {
+    transition-delay: 250ms;
+    transition-property: outline-width;
+    transition-duration: 0;
+  }
+
   /*
    * overrides make mobile-first coding style challenging
    * so we explicitly define mobile breakpoint here
@@ -245,6 +259,7 @@ export const Background = styled(Scrollable)<BackgroundProps>`
   padding: 6px;
   min-width: 180px;
   min-height: 44px;
+  max-height: 75vh;
   pointer-events: all;
   font-weight: normal;
 
@@ -258,6 +273,7 @@ export const Background = styled(Scrollable)<BackgroundProps>`
     transform-origin: ${(props: BackgroundProps) =>
       props.rightAnchor ? "75%" : "25%"} 0;
     max-width: ${(props: BackgroundProps) => props.maxWidth ?? 276}px;
+    max-height: 100vh;
     background: ${(props: BackgroundProps) => props.theme.menuBackground};
     box-shadow: ${(props: BackgroundProps) => props.theme.menuShadow};
   `};

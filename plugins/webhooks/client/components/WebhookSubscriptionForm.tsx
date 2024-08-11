@@ -39,6 +39,10 @@ const WEBHOOK_EVENTS = {
     "documents.move",
     "documents.update",
     "documents.title_change",
+    "documents.add_user",
+    "documents.remove_user",
+    "documents.add_group",
+    "documents.remove_group",
   ],
   collections: [
     "collections.create",
@@ -229,7 +233,7 @@ function WebhookSubscriptionForm({ handleSubmit, webhookSubscription }: Props) {
 
   return (
     <form onSubmit={formHandleSubmit(handleSubmit)}>
-      <Text type="secondary">
+      <Text as="p" type="secondary">
         <Trans>
           Provide a descriptive name for this webhook and the URL we should send
           a POST request to when matching events are created.
@@ -264,7 +268,7 @@ function WebhookSubscriptionForm({ handleSubmit, webhookSubscription }: Props) {
           })}
         />
       </TextFields>
-      <Text type="secondary">
+      <Text as="p" type="secondary">
         <Trans>
           Subscribe to all events, groups, or individual events. We recommend
           only subscribing to the minimum amount of events that your application
@@ -280,7 +284,7 @@ function WebhookSubscriptionForm({ handleSubmit, webhookSubscription }: Props) {
                 group !== "comment" ||
                 team.getPreference(TeamPreference.Commenting)
             )
-            .map(([group, events], i) => (
+            .map(([group, groupEvents], i) => (
               <GroupWrapper key={i} isMobile={isMobile}>
                 <EventCheckbox
                   label={t(`All {{ groupName }} events`, {
@@ -289,7 +293,7 @@ function WebhookSubscriptionForm({ handleSubmit, webhookSubscription }: Props) {
                   value={group}
                 />
                 <FieldSet disabled={selectedGroups.includes(group)}>
-                  {events.map((event) => (
+                  {groupEvents.map((event) => (
                     <EventCheckbox label={event} value={event} key={event} />
                   ))}
                 </FieldSet>

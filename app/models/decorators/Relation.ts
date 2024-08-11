@@ -1,20 +1,23 @@
 import invariant from "invariant";
 import type Model from "../base/Model";
 
-type RelationOptions = {
-  /** Whether this relation is required */
+/** The behavior of a relationship on deletion */
+type DeleteBehavior = "cascade" | "null" | "ignore";
+
+type RelationOptions<T = Model> = {
+  /** Whether this relation is required. */
   required?: boolean;
-  /** Behavior of relationship on deletion */
-  onDelete: "cascade" | "null" | "ignore";
+  /** Behavior of this model when relationship is deleted. */
+  onDelete: DeleteBehavior | ((item: T) => DeleteBehavior);
 };
 
-type RelationProperties = {
-  /** The name of the property on the model that stores the ID of the relation */
+type RelationProperties<T = Model> = {
+  /** The name of the property on the model that stores the ID of the relation. */
   idKey: string;
-  /** A function that returns the class of the relation */
+  /** A function that returns the class of the relation. */
   relationClassResolver: () => typeof Model;
-  /** Options for the relation */
-  options: RelationOptions;
+  /** Options for the relation. */
+  options: RelationOptions<T>;
 };
 
 type InverseRelationProperties = RelationProperties & {
@@ -35,7 +38,9 @@ export const getInverseRelationsForModelClass = (targetClass: typeof Model) => {
 
   relations.forEach((relation, modelName) => {
     relation.forEach((properties, propertyName) => {
-      if (properties.relationClassResolver().name === targetClass.name) {
+      if (
+        properties.relationClassResolver().modelName === targetClass.modelName
+      ) {
         inverseRelations.set(propertyName, {
           ...properties,
           modelName,
@@ -46,6 +51,9 @@ export const getInverseRelationsForModelClass = (targetClass: typeof Model) => {
 
   return inverseRelations;
 };
+
+export const getRelationsForModelClass = (targetClass: typeof Model) =>
+  relations.get(targetClass.modelName);
 
 /**
  * A decorator that records this key as a relation field on the model.
@@ -66,13 +74,13 @@ export default function Relation<T extends typeof Model>(
     // this to determine how to update relations when a model is deleted.
     if (options) {
       const configForClass =
-        relations.get(target.constructor.name) || new Map();
+        relations.get(target.constructor.modelName) || new Map();
       configForClass.set(propertyKey, {
         options,
         relationClassResolver: classResolver,
         idKey,
       });
-      relations.set(target.constructor.name, configForClass);
+      relations.set(target.constructor.modelName, configForClass);
     }
 
     Object.defineProperty(target, propertyKey, {
@@ -83,9 +91,9 @@ export default function Relation<T extends typeof Model>(
           return undefined;
         }
 
-        const relationClassName = classResolver().name;
+        const relationClassName = classResolver().modelName;
         const store =
-          this.store.rootStore[`${relationClassName.toLowerCase()}s`];
+          this.store.rootStore.getStoreForModelName(relationClassName);
         invariant(store, `Store for ${relationClassName} not found`);
 
         return store.get(id);
@@ -94,9 +102,9 @@ export default function Relation<T extends typeof Model>(
         this[idKey] = newValue ? newValue.id : undefined;
 
         if (newValue) {
-          const relationClassName = classResolver().name;
+          const relationClassName = classResolver().modelName;
           const store =
-            this.store.rootStore[`${relationClassName.toLowerCase()}s`];
+            this.store.rootStore.getStoreForModelName(relationClassName);
           invariant(store, `Store for ${relationClassName} not found`);
 
           store.add(newValue);

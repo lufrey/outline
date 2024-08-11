@@ -8,7 +8,11 @@ import Button from "~/components/Button";
 import Flex from "~/components/Flex";
 import Text from "~/components/Text";
 import useStores from "~/hooks/useStores";
-import { collectionPath, documentPath } from "~/utils/routeHelpers";
+import {
+  collectionPath,
+  documentPath,
+  settingsPath,
+} from "~/utils/routeHelpers";
 
 type Props = {
   document: Document;
@@ -21,7 +25,8 @@ function DocumentDelete({ document, onSubmit }: Props) {
   const history = useHistory();
   const [isDeleting, setDeleting] = React.useState(false);
   const [isArchiving, setArchiving] = React.useState(false);
-  const canArchive = !document.isDraft && !document.isArchived;
+  const canArchive =
+    !document.isDraft && !document.isArchived && !document.template;
   const collection = document.collectionId
     ? collections.get(document.collectionId)
     : undefined;
@@ -50,8 +55,12 @@ function DocumentDelete({ document, onSubmit }: Props) {
             }
           }
 
-          // otherwise, redirect to the collection home
-          history.push(collectionPath(collection?.url || "/"));
+          // If template, redirect to the template settings.
+          // Otherwise redirect to the collection (or) home.
+          const path = document.template
+            ? settingsPath("templates")
+            : collectionPath(collection?.path || "/");
+          history.push(path);
         }
 
         onSubmit();
@@ -82,65 +91,65 @@ function DocumentDelete({ document, onSubmit }: Props) {
   );
 
   return (
-    <Flex column>
-      <form onSubmit={handleSubmit}>
-        <Text type="secondary">
-          {document.isTemplate ? (
-            <Trans
-              defaults="Are you sure you want to delete the <em>{{ documentTitle }}</em> template?"
-              values={{
-                documentTitle: document.titleWithDefault,
-              }}
-              components={{
-                em: <strong />,
-              }}
-            />
-          ) : nestedDocumentsCount < 1 ? (
-            <Trans
-              defaults="Are you sure about that? Deleting the <em>{{ documentTitle }}</em> document will delete all of its history</em>."
-              values={{
-                documentTitle: document.titleWithDefault,
-              }}
-              components={{
-                em: <strong />,
-              }}
-            />
-          ) : (
-            <Trans
-              count={nestedDocumentsCount}
-              defaults="Are you sure about that? Deleting the <em>{{ documentTitle }}</em> document will delete all of its history and <em>{{ any }} nested document</em>."
-              values={{
-                documentTitle: document.titleWithDefault,
-                any: nestedDocumentsCount,
-              }}
-              components={{
-                em: <strong />,
-              }}
-            />
-          )}
-        </Text>
-        {canArchive && (
-          <Text type="secondary">
-            <Trans>
-              If you’d like the option of referencing or restoring the{" "}
-              {{
-                noun: document.noun,
-              }}{" "}
-              in the future, consider archiving it instead.
-            </Trans>
-          </Text>
+    <form onSubmit={handleSubmit}>
+      <Text as="p" type="secondary">
+        {document.isTemplate ? (
+          <Trans
+            defaults="Are you sure you want to delete the <em>{{ documentTitle }}</em> template?"
+            values={{
+              documentTitle: document.titleWithDefault,
+            }}
+            components={{
+              em: <strong />,
+            }}
+          />
+        ) : nestedDocumentsCount < 1 ? (
+          <Trans
+            defaults="Are you sure about that? Deleting the <em>{{ documentTitle }}</em> document will delete all of its history</em>."
+            values={{
+              documentTitle: document.titleWithDefault,
+            }}
+            components={{
+              em: <strong />,
+            }}
+          />
+        ) : (
+          <Trans
+            count={nestedDocumentsCount}
+            defaults="Are you sure about that? Deleting the <em>{{ documentTitle }}</em> document will delete all of its history and <em>{{ any }} nested document</em>."
+            values={{
+              documentTitle: document.titleWithDefault,
+              any: nestedDocumentsCount,
+            }}
+            components={{
+              em: <strong />,
+            }}
+          />
         )}
-        <Button type="submit" danger>
-          {isDeleting ? `${t("Deleting")}…` : t("I’m sure – Delete")}
-        </Button>
-        &nbsp;&nbsp;
+      </Text>
+      {canArchive && (
+        <Text as="p" type="secondary">
+          <Trans>
+            If you’d like the option of referencing or restoring the{" "}
+            {{
+              noun: document.noun,
+            }}{" "}
+            in the future, consider archiving it instead.
+          </Trans>
+        </Text>
+      )}
+
+      <Flex justify="flex-end" gap={8}>
         {canArchive && (
           <Button type="button" onClick={handleArchive} neutral>
             {isArchiving ? `${t("Archiving")}…` : t("Archive")}
           </Button>
         )}
-      </form>
-    </Flex>
+        <Button type="submit" danger>
+          {isDeleting ? `${t("Deleting")}…` : t("I’m sure – Delete")}
+        </Button>
+      </Flex>
+    </form>
   );
 }
 

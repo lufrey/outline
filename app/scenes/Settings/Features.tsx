@@ -9,30 +9,27 @@ import Scene from "~/components/Scene";
 import Switch from "~/components/Switch";
 import Text from "~/components/Text";
 import useCurrentTeam from "~/hooks/useCurrentTeam";
-import useStores from "~/hooks/useStores";
 import SettingRow from "./components/SettingRow";
 
 function Features() {
-  const { auth } = useStores();
   const team = useCurrentTeam();
   const { t } = useTranslation();
 
   const handlePreferenceChange =
     (inverted = false) =>
     async (ev: React.ChangeEvent<HTMLInputElement>) => {
-      const preferences = {
-        ...team.preferences,
-        [ev.target.name]: inverted ? !ev.target.checked : ev.target.checked,
-      };
-
-      await auth.updateTeam({ preferences });
+      team.setPreference(
+        ev.target.name as TeamPreference,
+        inverted ? !ev.target.checked : ev.target.checked
+      );
+      await team.save();
       toast.success(t("Settings saved"));
     };
 
   return (
     <Scene title={t("Features")} icon={<BeakerIcon />}>
       <Heading>{t("Features")}</Heading>
-      <Text type="secondary">
+      <Text as="p" type="secondary">
         <Trans>
           Manage optional and beta features. Changing these settings will affect
           the experience for all members of the workspace.

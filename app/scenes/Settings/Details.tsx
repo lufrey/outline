@@ -8,7 +8,7 @@ import { useTranslation, Trans } from "react-i18next";
 import { toast } from "sonner";
 import { ThemeProvider, useTheme } from "styled-components";
 import { buildDarkTheme, buildLightTheme } from "@shared/styles/theme";
-import { CustomTheme, TeamPreference } from "@shared/types";
+import { CustomTheme, TOCPosition, TeamPreference } from "@shared/types";
 import { getBaseDomain } from "@shared/utils/domains";
 import Button from "~/components/Button";
 import ButtonLink from "~/components/ButtonLink";
@@ -16,6 +16,7 @@ import DefaultCollectionInputSelect from "~/components/DefaultCollectionInputSel
 import Heading from "~/components/Heading";
 import Input from "~/components/Input";
 import InputColor from "~/components/InputColor";
+import InputSelect from "~/components/InputSelect";
 import Scene from "~/components/Scene";
 import Switch from "~/components/Switch";
 import Text from "~/components/Text";
@@ -24,11 +25,12 @@ import usePolicy from "~/hooks/usePolicy";
 import useStores from "~/hooks/useStores";
 import isCloudHosted from "~/utils/isCloudHosted";
 import TeamDelete from "../TeamDelete";
+import { ActionRow } from "./components/ActionRow";
 import ImageInput from "./components/ImageInput";
 import SettingRow from "./components/SettingRow";
 
 function Details() {
-  const { auth, dialogs, ui } = useStores();
+  const { dialogs, ui } = useStores();
   const { t } = useTranslation();
   const team = useCurrentTeam();
   const theme = useTheme();
@@ -58,6 +60,10 @@ function Details() {
     isHexColor
   );
 
+  const [tocPosition, setTocPosition] = useState(
+    team.getPreference(TeamPreference.TocPosition) as TOCPosition
+  );
+
   const handleSubmit = React.useCallback(
     async (event?: React.SyntheticEvent) => {
       if (event) {
@@ -65,7 +71,7 @@ function Details() {
       }
 
       try {
-        await auth.updateTeam({
+        await team.save({
           name,
           subdomain,
           defaultCollectionId,
@@ -73,6 +79,7 @@ function Details() {
             ...team.preferences,
             publicBranding,
             customTheme,
+            tocPosition,
           },
         });
         toast.success(t("Settings saved"));
@@ -80,16 +87,7 @@ function Details() {
         toast.error(err.message);
       }
     },
-    [
-      auth,
-      name,
-      subdomain,
-      defaultCollectionId,
-      team.preferences,
-      publicBranding,
-      customTheme,
-      t,
-    ]
+    [team, name, subdomain, defaultCollectionId, publicBranding, customTheme, t]
   );
 
   const handleNameChange = React.useCallback(
@@ -106,10 +104,8 @@ function Details() {
     []
   );
 
-  const handleAvatarUpload = async (avatarUrl: string) => {
-    await auth.updateTeam({
-      avatarUrl,
-    });
+  const handleAvatarChange = async (avatarUrl: string | null) => {
+    await team.save({ avatarUrl });
     toast.success(t("Logo updated"));
   };
 
@@ -124,7 +120,6 @@ function Details() {
     dialogs.openModal({
       title: t("Delete workspace"),
       content: <TeamDelete onSubmit={dialogs.closeAllModals} />,
-      isCentered: true,
     });
   };
 
@@ -147,7 +142,7 @@ function Details() {
     <ThemeProvider theme={newTheme}>
       <Scene title={t("Details")} icon={<TeamIcon />}>
         <Heading>{t("Details")}</Heading>
-        <Text type="secondary">
+        <Text as="p" type="secondary">
           <Trans>
             These settings affect the way that your workspace appears to
             everyone on the team.
@@ -164,7 +159,7 @@ function Details() {
             )}
           >
             <ImageInput
-              onSuccess={handleAvatarUpload}
+              onSuccess={handleAvatarChange}
               onError={handleAvatarError}
               model={team}
               borderRadius={0}
@@ -186,7 +181,6 @@ function Details() {
             />
           </SettingRow>
           <SettingRow
-            border={false}
             label={t("Theme")}
             name="accent"
             description={
@@ -202,7 +196,6 @@ function Details() {
                     >
                       {t("Reset theme")}
                     </ButtonLink>
-                    .
                   </>
                 )}
               </>
@@ -225,7 +218,6 @@ function Details() {
           </SettingRow>
           {team.avatarUrl && (
             <SettingRow
-              border={false}
               name={TeamPreference.PublicBranding}
               label={t("Public branding")}
               description={t(
@@ -242,6 +234,30 @@ function Details() {
               />
             </SettingRow>
           )}
+          <SettingRow
+            border={false}
+            label={t("Table of contents position")}
+            name="tocPosition"
+            description={t(
+              "The side to display the table of contents in relation to the main content."
+            )}
+          >
+            <InputSelect
+              ariaLabel={t("Table of contents position")}
+              options={[
+                {
+                  label: t("Left"),
+                  value: TOCPosition.Left,
+                },
+                {
+                  label: t("Right"),
+                  value: TOCPosition.Right,
+                },
+              ]}
+              value={tocPosition}
+              onChange={(p: TOCPosition) => setTocPosition(p)}
+            />
+          </SettingRow>
 
           <Heading as="h2">{t("Behavior")}</Heading>
 
@@ -288,9 +304,11 @@ function Details() {
             />
           </SettingRow>
 
-          <Button type="submit" disabled={auth.isSaving || !isValid}>
-            {auth.isSaving ? `${t("Saving")}…` : t("Save")}
-          </Button>
+          <ActionRow>
+            <Button type="submit" disabled={team.isSaving || !isValid}>
+              {team.isSaving ? `${t("Saving")}…` : t("Save")}
+            </Button>
+          </ActionRow>
 
           {can.delete && (
             <>

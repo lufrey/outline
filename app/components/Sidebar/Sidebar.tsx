@@ -1,11 +1,11 @@
 import { observer } from "mobx-react";
 import * as React from "react";
-import { Portal } from "react-portal";
 import { useLocation } from "react-router-dom";
 import styled, { css, useTheme } from "styled-components";
 import breakpoint from "styled-components-breakpoint";
 import { depths, s } from "@shared/styles";
 import Flex from "~/components/Flex";
+import useCurrentUser from "~/hooks/useCurrentUser";
 import useMenuContext from "~/hooks/useMenuContext";
 import usePrevious from "~/hooks/usePrevious";
 import useStores from "~/hooks/useStores";
@@ -24,20 +24,21 @@ const ANIMATION_MS = 250;
 
 type Props = {
   children: React.ReactNode;
+  hidden?: boolean;
   className?: string;
 };
 
 const Sidebar = React.forwardRef<HTMLDivElement, Props>(function _Sidebar(
-  { children, className }: Props,
+  { children, hidden = false, className }: Props,
   ref: React.RefObject<HTMLDivElement>
 ) {
   const [isCollapsing, setCollapsing] = React.useState(false);
   const theme = useTheme();
-  const { ui, auth } = useStores();
+  const { ui } = useStores();
   const location = useLocation();
   const previousLocation = usePrevious(location);
   const { isMenuOpen } = useMenuContext();
-  const { user } = auth;
+  const user = useCurrentUser({ rejectOnEmpty: false });
   const width = ui.sidebarWidth;
   const collapsed = ui.sidebarIsClosed && !isMenuOpen;
   const maxWidth = theme.sidebarMaxWidth;
@@ -93,6 +94,7 @@ const Sidebar = React.forwardRef<HTMLDivElement, Props>(function _Sidebar(
 
   const handleMouseDown = React.useCallback(
     (event) => {
+      event.preventDefault();
       setOffset(event.pageX - width);
       setResizing(true);
       setAnimating(false);
@@ -111,10 +113,7 @@ const Sidebar = React.forwardRef<HTMLDivElement, Props>(function _Sidebar(
     (ev) => {
       if (hasPointerMoved) {
         setHovering(
-          ev.pageX < width &&
-            ev.pageX > 0 &&
-            ev.pageY < window.innerHeight &&
-            ev.pageY > 0
+          ev.pageX < width && ev.pageY < window.innerHeight && ev.pageY > 0
         );
       }
     },
@@ -145,8 +144,11 @@ const Sidebar = React.forwardRef<HTMLDivElement, Props>(function _Sidebar(
 
   React.useEffect(() => {
     if (isResizing) {
+      document.body.style.cursor = "col-resize";
       document.addEventListener("mousemove", handleDrag);
       document.addEventListener("mouseup", handleStopDrag);
+    } else {
+      document.body.style.cursor = "initial";
     }
 
     return () => {
@@ -181,6 +183,7 @@ const Sidebar = React.forwardRef<HTMLDivElement, Props>(function _Sidebar(
       <Container
         ref={ref}
         style={style}
+        $hidden={hidden}
         $isHovering={isHovering}
         $isAnimating={isAnimating}
         $isSmallerThanMinimum={isSmallerThanMinimum}
@@ -191,11 +194,6 @@ const Sidebar = React.forwardRef<HTMLDivElement, Props>(function _Sidebar(
         onPointerLeave={handlePointerLeave}
         column
       >
-        {ui.mobileSidebarVisible && (
-          <Portal>
-            <Backdrop onClick={ui.toggleMobileSidebar} />
-          </Portal>
-        )}
         {children}
 
         {user && (
@@ -234,6 +232,7 @@ const Sidebar = React.forwardRef<HTMLDivElement, Props>(function _Sidebar(
           onDoubleClick={ui.sidebarIsClosed ? undefined : handleReset}
         />
       </Container>
+      {ui.mobileSidebarVisible && <Backdrop onClick={ui.toggleMobileSidebar} />}
     </>
   );
 });
@@ -246,7 +245,7 @@ const Backdrop = styled.a`
   bottom: 0;
   right: 0;
   cursor: default;
-  z-index: ${depths.sidebar - 1};
+  z-index: ${depths.mobileSidebar - 1};
   background: ${s("backdrop")};
 `;
 
@@ -256,6 +255,7 @@ type ContainerProps = {
   $isSmallerThanMinimum: boolean;
   $isHovering: boolean;
   $collapsed: boolean;
+  $hidden: boolean;
 };
 
 const hoverStyles = (props: ContainerProps) => `
@@ -274,20 +274,21 @@ const hoverStyles = (props: ContainerProps) => `
 `;
 
 const Container = styled(Flex)<ContainerProps>`
+  opacity: ${(props) => (props.$hidden ? 0 : 1)};
   position: fixed;
   top: 0;
   bottom: 0;
   width: 100%;
   background: ${s("sidebarBackground")};
-  transition: box-shadow 100ms ease-in-out, opacity 100ms ease-in-out,
-    transform 100ms ease-out,
+  transition: box-shadow 150ms ease-in-out, opacity 150ms ease-in-out,
+    transform 150ms ease-out,
     ${s("backgroundTransition")}
       ${(props: ContainerProps) =>
         props.$isAnimating ? `,width ${ANIMATION_MS}ms ease-out` : ""};
   transform: translateX(
     ${(props) => (props.$mobileSidebarVisible ? 0 : "-100%")}
   );
-  z-index: ${depths.sidebar};
+  z-index: ${depths.mobileSidebar};
   max-width: 80%;
   min-width: 280px;
   ${fadeOnDesktopBackgrounded()}
@@ -302,6 +303,7 @@ const Container = styled(Flex)<ContainerProps>`
   }
 
   ${breakpoint("tablet")`
+    z-index: ${depths.sidebar};
     margin: 0;
     min-width: 0;
     transform: translateX(${(props: ContainerProps) =>
@@ -322,7 +324,7 @@ const Container = styled(Flex)<ContainerProps>`
 
       & > div {
         opacity: 1;
-      }    
+      }
     }
   `};
 `;

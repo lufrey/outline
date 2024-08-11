@@ -2,6 +2,7 @@ import { faker } from "@faker-js/faker";
 import isNil from "lodash/isNil";
 import isNull from "lodash/isNull";
 import randomstring from "randomstring";
+import { InferCreationAttributes } from "sequelize";
 import { v4 as uuidv4 } from "uuid";
 import {
   CollectionPermission,
@@ -10,7 +11,9 @@ import {
   IntegrationService,
   IntegrationType,
   NotificationEventType,
+  UserRole,
 } from "@shared/types";
+import { parser } from "@server/editor";
 import {
   Share,
   Team,
@@ -32,6 +35,7 @@ import {
   Notification,
   SearchQuery,
   Pin,
+  Comment,
 } from "@server/models";
 import AttachmentHelper from "@server/models/helpers/AttachmentHelper";
 
@@ -121,7 +125,6 @@ export async function buildSubscription(overrides: Partial<Subscription> = {}) {
   }
 
   return Subscription.create({
-    enabled: true,
     event: "documents.update",
     ...overrides,
   });
@@ -138,7 +141,7 @@ export function buildTeam(overrides: Record<string, any> = {}) {
         },
       ],
       ...overrides,
-    },
+    } as Partial<InferCreationAttributes<Team>>,
     {
       include: "authenticationProviders",
     }
@@ -199,7 +202,7 @@ export async function buildUser(overrides: Partial<User> = {}) {
           ]
         : [],
       ...overrides,
-    },
+    } as Partial<InferCreationAttributes<User>>,
     {
       include: "authentications",
     }
@@ -212,11 +215,11 @@ export async function buildUser(overrides: Partial<User> = {}) {
 }
 
 export async function buildAdmin(overrides: Partial<User> = {}) {
-  return buildUser({ ...overrides, isAdmin: true });
+  return buildUser({ ...overrides, role: UserRole.Admin });
 }
 
 export async function buildViewer(overrides: Partial<User> = {}) {
-  return buildUser({ ...overrides, isViewer: true });
+  return buildUser({ ...overrides, role: UserRole.Viewer });
 }
 
 export async function buildInvite(overrides: Partial<User> = {}) {
@@ -369,14 +372,16 @@ export async function buildDocument(
     overrides.collectionId = collection.id;
   }
 
+  const text = overrides.text ?? "This is the text in an example document";
   const document = await Document.create(
     {
       title: faker.lorem.words(4),
-      text: "This is the text in an example document",
+      content: overrides.content ?? parser.parse(text)?.toJSON(),
+      text,
       publishedAt: isNull(overrides.collectionId) ? null : new Date(),
       lastModifiedById: overrides.userId,
       createdById: overrides.userId,
-      editorVersion: 2,
+      editorVersion: "12.0.0",
       ...overrides,
     },
     {
@@ -393,6 +398,47 @@ export async function buildDocument(
   }
 
   return document;
+}
+
+export async function buildComment(overrides: {
+  userId: string;
+  documentId: string;
+  parentCommentId?: string;
+  resolvedById?: string;
+}) {
+  const comment = await Comment.create({
+    resolvedById: overrides.resolvedById,
+    parentCommentId: overrides.parentCommentId,
+    documentId: overrides.documentId,
+    data: {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              content: [],
+              type: "text",
+              text: "test",
+            },
+          ],
+        },
+      ],
+    },
+    createdById: overrides.userId,
+  });
+
+  return comment;
+}
+
+export async function buildResolvedComment(
+  user: User,
+  overrides: Parameters<typeof buildComment>[0]
+) {
+  const comment = await buildComment(overrides);
+  comment.resolve(user);
+  await comment.save();
+  return comment;
 }
 
 export async function buildFileOperation(
@@ -449,10 +495,12 @@ export async function buildAttachment(
   const acl = overrides.acl || "public-read";
   const name = fileName || faker.system.fileName();
   return Attachment.create({
+    id,
     key: AttachmentHelper.getKey({ acl, id, name, userId: overrides.userId }),
     contentType: "image/png",
     size: 100,
     acl,
+    name,
     createdAt: new Date("2018-01-02T00:00:00.000Z"),
     updatedAt: new Date("2018-01-02T00:00:00.000Z"),
     ...overrides,
